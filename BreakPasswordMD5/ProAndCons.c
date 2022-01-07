@@ -6,7 +6,6 @@
 #include <stdarg.h>
 #include <dirent.h>
 
-#define MAXNITEMS 1000000
 #define MAXNTHREADS 100
 int nitems; /* read-only by producer and consumer */
 struct {
