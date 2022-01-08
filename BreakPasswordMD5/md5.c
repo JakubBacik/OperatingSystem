@@ -7,7 +7,7 @@
 int main()
 {
     unsigned char digest[MD5_DIGEST_LENGTH];
-    char string[] = "kirwex";
+    char string[] = "adam";
     
     MD5((unsigned char*)&string, strlen(string), (unsigned char*)&digest);    
  
