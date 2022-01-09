@@ -20,6 +20,7 @@ int main(int argc, char* argv[]){
     for(int i=0; i<32; i++){
       dataFromFIle[numberOfLine][i]=buffer[i];
     }
+    dataFromFIle[numberOfLine][33]='0';
     numberOfLine++;
   }
 
@@ -45,9 +46,6 @@ int main(int argc, char* argv[]){
     strtok(bufferDictionary, "\n");
     strcpy( tab[number], bufferDictionary);
     number++;
-  }
-  for(int i=0; i<numberLoop; i++){
-    printf("%s\n", tab[i]);
   }
   fclose(handlerDictionary);
 
