@@ -7,7 +7,8 @@
 #include <sys/signal.h>
 #include "openssl/md5.h"
 
-# define NUMBEROFPRODUCER 2
+# define NUMBEROFPRODUCER 1
+# define NUMBER 20 
 
 /*TESTOWE DANE*/
 char password[3][33] = {"1d7c2923c1684726dc23d2901c4d81570", "2c4c8979a63e1eb71c23ae173a60dd0c0", "518ff78aea202ba72d59851aa8462fb50" };;
@@ -21,6 +22,9 @@ char* slownik[10] = {"adam", "marek", "jan", "kuba", "michal", "adrian", "ola", 
 void handler (int sig);
 void producer(void *);
 void consumer(void *);
+char* Generate(char* password, int number78);
+char* appendCharToCharArray(char* array, char a);
+char MakePassword(char* password, int numner);
 int numberofBreakPass[1000][2];
 struct{
     pthread_mutex_t mutex;
@@ -72,39 +76,45 @@ int main(int argc, char **argv){
 
 
 void producer(void *threadid){
+    for(int j=0; ;j++){
+        for(int h=0; h<10; h++){
 
-    for(int h=0; h<10; h++){
-        unsigned char digest[32];
-        MD5(slownik[h], strlen(slownik[h]), (unsigned char*)&digest); 
+            char* passToMD5 = Generate(slownik[h], j);
+            printf("%s\n", passToMD5);
+    
+            unsigned char digest[32];
+            MD5(passToMD5, strlen(passToMD5), (unsigned char*)&digest); 
+                            
+            char convertFromHex[32];
+            for(int i = 0; i < 16; i++)
+                sprintf(&convertFromHex[i*2], "%02x", (unsigned int)digest[i]);
+
+            for(int i=0; i<3; i++){
+                if(password[i][32] == '0'){
+                    if(strncmp(password[i], convertFromHex, 32)==0){
                         
-        char convertFromHex[32];
-        for(int i = 0; i < 16; i++)
-            sprintf(&convertFromHex[i*2], "%02x", (unsigned int)digest[i]);
+                        printf("Wyslanie\n");
 
-        for(int i=0; i<3; i++){
-            if(password[i][32] == '0'){
-                if(strncmp(password[i], convertFromHex, 32)==0){
-                    
-                    printf("Wyslanie\n");
+                        pthread_mutex_lock(&put.mutex);
+                        numberofBreakPass[put.number][0]=h;
+                        numberofBreakPass[put.number][1]=i;
+                        put.number++;
+                        pthread_mutex_unlock(&put.mutex);
 
-                    pthread_mutex_lock(&put.mutex);
-                    numberofBreakPass[put.number][0]=h;
-                    numberofBreakPass[put.number][1]=i;
-                    put.number++;
-                    pthread_mutex_unlock(&put.mutex);
-
-                    pthread_mutex_lock(&nready.mutex);
-                    if (nready.nready == 0){
-                        pthread_cond_signal(&nready.cond);
+                        pthread_mutex_lock(&nready.mutex);
+                        if (nready.nready == 0){
+                            pthread_cond_signal(&nready.cond);
+                        }
+                        nready.nready++;    
+                        pthread_mutex_unlock(&nready.mutex);
                     }
-                    nready.nready++;    
-                    pthread_mutex_unlock(&nready.mutex);
+                    
                 }
-                
             }
         }
+        
+
     }
-    sleep(2000);
     pthread_exit (NULL);
 }
 
@@ -127,4 +137,61 @@ void consumer(void *threadid){
 
 void handler (int signal_number){
     printf ("\n The number of broken passwords is %d\n \n", put.number);
+}
+
+
+char MakePassword(char* password, int numner){
+
+}
+
+
+char *addToTab = "0123456789!@#$%^&*()";
+char* appendCharToCharArray(char* array, char a)
+{
+    size_t len = strlen(array);
+
+    char* ret = (char *) calloc(len+2, sizeof(char));
+
+    strcpy(ret, array);
+    ret[len] = a;
+    ret[len+1] = '\0';
+
+    return ret;
+}
+
+char* Generate(char* password, int number78) {
+    char toShow[20]={' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' '};
+    int number1=0, number2=0;
+    int number123456=0;
+    size_t length = strlen(password);
+    int tab[NUMBER] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+    number1 = number78;
+    for (int i = 0; i < NUMBER; i++) {
+        number2 = number1 % NUMBER;
+        number1 = number1 / NUMBER;
+        if (number2 != 0 || i == 0) {
+            tab[i] = number2;
+            number123456++;
+        }
+    }
+    char *toReturn;
+    char *tmp;
+    toReturn = (char *) calloc( (length+number123456), sizeof(char));
+    for (int i = 0; i < length; i++) {
+        toReturn[i] = password[i];
+    }
+
+    for (int i = 0; i < NUMBER; i++) {
+        int number = tab[i];
+        if (number != -1) {
+            toShow[i] = addToTab[number];
+        }
+    }
+
+    for (int i = 0; i < number123456; i++){
+        toReturn =appendCharToCharArray(toReturn, toShow[i]);
+    }
+
+    return toReturn;
+
 }
