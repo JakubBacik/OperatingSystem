@@ -7,11 +7,11 @@
 #include <sys/signal.h>
 #include "openssl/md5.h"
 
-# define NUMBEROFPRODUCER 1
+# define NUMBEROFPRODUCER 4
 # define NUMBER 20 
 
 /*TESTOWE DANE*/
-char password[3][33] = {"1d7c2923c1684726dc23d2901c4d81570", "2c4c8979a63e1eb71c23ae173a60dd0c0", "518ff78aea202ba72d59851aa8462fb50" };;
+char password[3][33] = {"1d7c2923c1684726dc23d2901c4d81570", "2c4c8979a63e1eb71c23ae173a60dd0c0", "458a02ad1a0f57f6d335098e1c631f040" };;
 
 char* slownik[10] = {"adam", "marek", "jan", "kuba", "michal", "adrian", "ola", "jacek", "mariola", "weronika"};
 
@@ -22,10 +22,16 @@ char* slownik[10] = {"adam", "marek", "jan", "kuba", "michal", "adrian", "ola", 
 void handler (int sig);
 void producer(void *);
 void consumer(void *);
-char* Generate(char* password, int number78);
-char* appendCharToCharArray(char* array, char a);
-char MakePassword(char* password, int numner);
-int numberofBreakPass[1000][2];
+char* Generate(char* password, int number78, int option);
+char* appendCharToCharArray(char* array, char a, int option);
+char* MakePassword(char* password, int numner,  int taskid);
+struct Data
+{
+    int numberOfBreakPass;
+    char* BreakPass;
+};
+
+struct Data numberofBreakPass[1000];
 struct{
     pthread_mutex_t mutex;
     pthread_cond_t cond;
@@ -35,6 +41,7 @@ struct{
 struct {
     pthread_mutex_t mutex;
     int number; /* next index to store */
+    int toShow;
 } put = { PTHREAD_MUTEX_INITIALIZER };
 
 int main(int argc, char **argv){
@@ -76,10 +83,12 @@ int main(int argc, char **argv){
 
 
 void producer(void *threadid){
-    for(int j=0; ;j++){
+    long taskid;
+    taskid = (long)threadid;
+    for(int j=0; j<1 ;j++){
         for(int h=0; h<10; h++){
 
-            char* passToMD5 = Generate(slownik[h], j);
+            char* passToMD5 = MakePassword(slownik[h], j, taskid);
             printf("%s\n", passToMD5);
     
             unsigned char digest[32];
@@ -96,8 +105,8 @@ void producer(void *threadid){
                         printf("Wyslanie\n");
 
                         pthread_mutex_lock(&put.mutex);
-                        numberofBreakPass[put.number][0]=h;
-                        numberofBreakPass[put.number][1]=i;
+                        numberofBreakPass[put.number].numberOfBreakPass=h;
+                        numberofBreakPass[put.number].BreakPass=passToMD5;
                         put.number++;
                         pthread_mutex_unlock(&put.mutex);
 
@@ -127,8 +136,7 @@ void consumer(void *threadid){
         nready.nready--;
         password[i][33] == '0';
         printf("Cracked password is:");
-        printf("%s \n", slownik[numberofBreakPass[i][0]]);
-        
+        printf("%s \n", numberofBreakPass[put.number-1].BreakPass);
         pthread_mutex_unlock(&nready.mutex);
     }
     
@@ -140,26 +148,59 @@ void handler (int signal_number){
 }
 
 
-char MakePassword(char* password, int numner){
+char* MakePassword(char* password, int numner, int taskid){
+    char* toReturn;
+    switch (taskid)
+    {
+    case 0:
+        if(numner < 10)
+            toReturn = password;
+        else
+            toReturn = Generate(password, numner-10, 1);
+        break;
+    case 1:
+        toReturn = Generate(password, numner, 2);
+        break;
+    case 2:
+        toReturn = Generate(password, numner, 3);
+        break;
+    case 3:
+        toReturn = Generate(password, numner, 4);
+        break;
+    
+    default:
+        printf("ERROR: Not enough number of thread");
+        break;
+    }
+
+    return toReturn;
 
 }
 
 
 char *addToTab = "0123456789!@#$%^&*()";
-char* appendCharToCharArray(char* array, char a)
+char* appendCharToCharArray(char* array, char a, int option)
 {
     size_t len = strlen(array);
-
-    char* ret = (char *) calloc(len+2, sizeof(char));
-
-    strcpy(ret, array);
-    ret[len] = a;
-    ret[len+1] = '\0';
+    char* ret= (char *) calloc(len+2, sizeof(char));
+    if (option ==1) {
+        strcpy(ret, array);
+        ret[len] = a;
+        ret[len + 1] = '\0';
+    }
+    if (option ==2) {
+        for(int i=0; i<len+1; i++){
+            ret[i+1]=array[i];
+        }
+        ret[0] = a;
+        ret[len + 1] = '\0';
+    }
 
     return ret;
 }
 
-char* Generate(char* password, int number78) {
+
+char* Generate(char* password, int number78, int option) {
     char toShow[20]={' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' '};
     int number1=0, number2=0;
     int number123456=0;
@@ -187,11 +228,32 @@ char* Generate(char* password, int number78) {
             toShow[i] = addToTab[number];
         }
     }
-
-    for (int i = 0; i < number123456; i++){
-        toReturn =appendCharToCharArray(toReturn, toShow[i]);
+    if(option == 1 || option == 2) {
+        for (int i = 0; i < number123456; i++) {
+            toReturn = appendCharToCharArray(toReturn, toShow[i], option);
+        }
+    }
+    if(option ==3 ){
+        for (int i = 0; i < number123456; i++) {
+            toReturn = appendCharToCharArray(toReturn, toShow[i], 1);
+        }
+        for (int i = 0; i < number123456; i++) {
+            toReturn = appendCharToCharArray(toReturn, toShow[i], 2);
+        }
     }
 
-    return toReturn;
+    if(option ==4 ) {
+        for (int i = 0; i < number123456; i++) {
+            toReturn = appendCharToCharArray(toReturn, toShow[i], 1);
+        }
+        for (int i = 0; i < length; i++) {
+            toReturn = appendCharToCharArray(toReturn, password[i], 1);
+        }
+
+
+    }
+
+
+        return toReturn;
 
 }
