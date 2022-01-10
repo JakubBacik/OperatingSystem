@@ -10,18 +10,11 @@
 
 # define NUMBEROFPRODUCER 4
 # define NUMBER 20 
-
-/*TESTOWE DANE*/
+char* slownik[10] = {"adam", "marek", "jan", "kuba", "michal", "adrian", "ola", "jacek", "mariola", "weronika"};
 char dataFromFIle[1000][33];
 char** tab;
 int numberOfLine=0;
 int numberLoop = 0;
-
-char* slownik[10] = {"adam", "marek", "jan", "kuba", "michal", "adrian", "ola", "jacek", "mariola", "weronika"};
-
-/*KONIEC TESTOWYCH DANYCH */
-
-
 
 void handler (int sig);
 void producer(void *);
@@ -85,6 +78,8 @@ int main(int argc, char **argv){
     pthread_cond_destroy(&nready.cond);
     pthread_exit (NULL);
 
+    free(tab);
+
 
 }
 
@@ -92,15 +87,14 @@ int main(int argc, char **argv){
 void producer(void *threadid){
     long taskid;
     taskid = (long)threadid;
-    for(int j=0;j<8;j++){
-        for(int h=0; h<numberLoop; h++){
+    for(int j=0; ;j++){
+        for(int h=0; h<10; h++){
             for(int k=0; k<3; k++){
-                char* passToMD5 = MakePassword(tab[h], j, k, taskid);
+                char* passToMD5 = MakePassword(tab[5], j, k, taskid);
                 printf("%s\n", passToMD5);
-        
                 unsigned char digest[32];
-                MD5(passToMD5, strlen(passToMD5), (unsigned char*)&digest); 
-                                
+                MD5(passToMD5, strlen(passToMD5), (unsigned char*)&digest);  
+                free(passToMD5);     
                 char convertFromHex[32];
                 for(int i = 0; i < 16; i++)
                     sprintf(&convertFromHex[i*2], "%02x", (unsigned int)digest[i]);
@@ -247,6 +241,7 @@ char* Generate(char* password, int number78, int option, int letter) {
             number123456++;
         }
     }
+
     char *toReturn;
     char *tmp;
     toReturn = (char *) calloc( (length+number123456), sizeof(char));
@@ -269,6 +264,7 @@ char* Generate(char* password, int number78, int option, int letter) {
             toShow[i] = addToTab[number];
         }
     }
+
     if(option == 1 || option == 2) {
         for (int i = 0; i < number123456; i++) {
             toReturn = appendCharToCharArray(toReturn, toShow[i], option);
@@ -285,15 +281,13 @@ char* Generate(char* password, int number78, int option, int letter) {
 
     if(option ==4 ) {
         for (int i = 0; i < number123456; i++) {
-            toReturn = appendCharToCharArray(toReturn, toShow[i], 1);
+            toReturn= appendCharToCharArray(toReturn, toShow[i], 1);
         }
         for (int i = 0; i < length; i++) {
             toReturn = appendCharToCharArray(toReturn, password[i], 1);
         }
 
-
     }
-
 
         return toReturn;
 
@@ -317,9 +311,7 @@ char* Dictionary(char* password, int letter) {
             toReturn[i] = toupper(password[i]);
     }
     toReturn[length+1] = '\0';
-    tmp =toReturn;
-    free(toReturn);
-    return tmp;
+    return toReturn;
 
 }
 
@@ -361,7 +353,7 @@ void getDataFromFile(char* dictionary, char* FileWithData){
   tab = (char**)malloc(sizeof(char *) * numberLoop);
   int number =0;
   while(nreadDictionary = getline(&bufferDictionary, &lenDictionary, handlerDictionary)!= -1) {
-    tab[number]=malloc ( strlen(bufferDictionary));
+    tab[number]=malloc(strlen(bufferDictionary));
     strtok(bufferDictionary, "\n");
     strcpy( tab[number], bufferDictionary);
     (tab[number])[strlen(tab[number])-1]='\0';
