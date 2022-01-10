@@ -16,11 +16,12 @@ char password[1000][33];
 char **dictionary;
 int numberOfPasswordInFile = 0;
 int numberOfDictionaryFile = 0;
-
+char newFileFromPassword[100] = "dataMD5.txt";
 
 void *producer(void *threadid);
 void *consumer(void *threadid);
 void handler(int signal_number);
+void *mainThread(void *threadid);
 char *MakePassword(char *password, int iteration, int letterSize, int taskid);
 char *AddCharToCharArray(char *charArray, char a, int optionDirection);
 char *GeneratePassword(char *password, int numberOfIteration, int optionAddChar, int letterSize);
@@ -51,7 +52,6 @@ struct
 
 int main(int argc, char **argv)
 {
-    char* newFileFromPassword;
     struct sigaction act;
     memset(&act, 0, sizeof(act));
     act.sa_handler = handler;
@@ -62,9 +62,16 @@ int main(int argc, char **argv)
         exit(-1);
     }
 
+    pthread_t tid_mainThread;
+    pthread_create(&tid_mainThread, NULL, mainThread, NULL);
+
+    pthread_join(tid_mainThread, NULL);
+    free(dictionary);
+}
+
+void *mainThread(void *threadid){
+    GetDataFromFile("words_alpha.txt", newFileFromPassword);
     pthread_t tid_producer[NUMBEROFPRODUCER], tid_consumer;
-    GetDataFromFile("words_alpha.txt", "dataMD5.txt");
-    
     /* create all producers and one consumer */
     for (int t = 0; t < NUMBEROFPRODUCER; t++)
     {
@@ -77,9 +84,26 @@ int main(int argc, char **argv)
         }
     }
     pthread_create(&tid_consumer, NULL, consumer, NULL);
-
-    while(scanft())
-
+    while(1){
+        if(scanf("%s", &newFileFromPassword)>0){
+            pthread_kill(tid_consumer, SIGHUP);
+            pthread_kill(tid_producer[0], SIGHUP);
+            pthread_kill(tid_producer[1], SIGHUP);
+            pthread_kill(tid_producer[2], SIGHUP);
+            pthread_kill(tid_producer[3], SIGHUP);
+            GetDataFromFile("words_alpha.txt", newFileFromPassword);
+            for (int t = 0; t < NUMBEROFPRODUCER; t++)
+            {
+                printf("Main: creating thread %d\n", t);
+                int rc = pthread_create(&tid_producer[t], NULL, producer, (void *)t);
+                if (rc){
+                    printf("ERROR; return code from pthread_create() is %d\n", rc);
+                    exit(-1);
+                }
+            }
+            pthread_create(&tid_consumer, NULL, consumer, NULL);
+        }
+    }
     /* wait for all producers and the consumer */
     for (int i = 0; i < NUMBEROFPRODUCER; i++)
     {
@@ -91,8 +115,6 @@ int main(int argc, char **argv)
     pthread_mutex_destroy(&put.mutex);
     pthread_cond_destroy(&nready.cond);
     pthread_exit(NULL);
-
-    free(dictionary);
 }
 
 /*
@@ -103,11 +125,10 @@ void *producer(void *threadid)
 {
     long taskid;
     taskid = (long)threadid;
-    for (int j = 0;; j++){
-        for (int h = 0; h < 10; h++){
+    for (int j = 0; ; j++){
+        for (int h = 0; h < 200; h++){
             for (int k = 0; k < 3; k++){
-                char *passToMD5 = MakePassword(dictionary[5], j, k, taskid);
-                printf("%s\n", passToMD5);
+                char *passToMD5 = MakePassword(dictionary[h], j, k, taskid);
 
                 unsigned char digest[32];
                 MD5(passToMD5, strlen(passToMD5), (unsigned char *)&digest);
@@ -123,9 +144,6 @@ void *producer(void *threadid)
                     {
                         if (strncmp(password[i], convertFromHex, 32) == 0)
                         {
-
-                            printf("------------------SEND ---------------------------\n");
-
                             pthread_mutex_lock(&put.mutex);
                             numberofBreakPass[put.number].numberOfBreakPass = h;
                             numberofBreakPass[put.number].BreakPass = passToMD5;
@@ -154,17 +172,17 @@ void *producer(void *threadid)
 
 void *consumer(void *threadid)
 {
-    for (int i = 0; i < 4; i++)
+    while (1)
     {
         pthread_mutex_lock(&nready.mutex);
 
         while (nready.nready == 0)
             pthread_cond_wait(&nready.cond, &nready.mutex);
         nready.nready--;
-        password[i][33] == '1';
+        
         printf("Cracked password is:");
         printf("%s \n", numberofBreakPass[put.number - 1].BreakPass);
-
+        password[numberofBreakPass[put.number].numberOfBreakPass][32] == '1';
         pthread_mutex_unlock(&nready.mutex);
     }
 
