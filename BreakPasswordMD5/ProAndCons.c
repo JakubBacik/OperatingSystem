@@ -8,67 +8,81 @@
 #include <ctype.h>
 #include "openssl/md5.h"
 
-# define NUMBEROFPRODUCER 4
-# define NUMBER 20 
-char* slownik[10] = {"adam", "marek", "jan", "kuba", "michal", "adrian", "ola", "jacek", "mariola", "weronika"};
-char dataFromFIle[1000][33];
-char** tab;
-int numberOfLine=0;
-int numberLoop = 0;
+#define NUMBEROFPRODUCER 4
+#define NUMBER 20
 
-void handler (int sig);
-void producer(void *);
-void consumer(void *);
-char* Generate(char* password, int number78, int option, int letter);
-char* appendCharToCharArray(char* array, char a, int option);
-char* MakePassword(char* password, int numner, int letter,  int taskid);
-char* Dictionary(char* password, int letter);
-void getDataFromFile(char* dictionary, char* FileWithData);
+char *addToTab = "0123456789!@#$%^&*()";
+char password[1000][33];
+char **dictionary;
+int numberOfPasswordInFile = 0;
+int numberOfDictionaryFile = 0;
+
+
+void *producer(void *threadid);
+void *consumer(void *threadid);
+void handler(int signal_number);
+char *MakePassword(char *password, int iteration, int letterSize, int taskid);
+char *AddCharToCharArray(char *charArray, char a, int optionDirection);
+char *GeneratePassword(char *password, int numberOfIteration, int optionAddChar, int letterSize);
+char *GeneratePasswordFromDictionay(char *password, int letterSize);
+void GetDataFromFile(char *dictionaryFile, char *passwordFile);
+
+
 struct Data
 {
     int numberOfBreakPass;
-    char* BreakPass;
+    char *BreakPass;
 };
 
 struct Data numberofBreakPass[1000];
-struct{
+struct
+{
     pthread_mutex_t mutex;
     pthread_cond_t cond;
-    int nready; /*number of ready consumer*/ 
-} nready = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER,0}; 
+    int nready; /*number of ready consumer*/
+} nready = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, 0};
 
-struct {
+struct
+{
     pthread_mutex_t mutex;
     int number; /* next index to store */
     int toShow;
-} put = { PTHREAD_MUTEX_INITIALIZER };
+} put = {PTHREAD_MUTEX_INITIALIZER};
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
+    char* newFileFromPassword;
     struct sigaction act;
-    memset (&act, 0, sizeof (act));
+    memset(&act, 0, sizeof(act));
     act.sa_handler = handler;
 
-    if (sigaction (SIGHUP, &act, 0) < 0) {
-        perror ("sigaction");
-        exit (-1);
+    if (sigaction(SIGHUP, &act, 0) < 0)
+    {
+        perror("sigaction");
+        exit(-1);
     }
 
     pthread_t tid_producer[NUMBEROFPRODUCER], tid_consumer;
-    getDataFromFile("words_alpha.txt", "dataMD5.txt");
-
+    GetDataFromFile("words_alpha.txt", "dataMD5.txt");
+    
     /* create all producers and one consumer */
-    for(int t=0; t<NUMBEROFPRODUCER; t++) {
+    for (int t = 0; t < NUMBEROFPRODUCER; t++)
+    {
         printf("Main: creating thread %d\n", t);
         int rc = pthread_create(&tid_producer[t], NULL, producer, (void *)t);
-        if (rc) {
+        if (rc)
+        {
             printf("ERROR; return code from pthread_create() is %d\n", rc);
             exit(-1);
         }
     }
-    pthread_create(&tid_consumer,NULL,consumer,NULL);
+    pthread_create(&tid_consumer, NULL, consumer, NULL);
+
+    while(scanft())
 
     /* wait for all producers and the consumer */
-    for (int i = 0; i < NUMBEROFPRODUCER; i++) {
+    for (int i = 0; i < NUMBEROFPRODUCER; i++)
+    {
         pthread_join(tid_producer[i], NULL);
     }
     pthread_join(tid_consumer, NULL);
@@ -76,290 +90,358 @@ int main(int argc, char **argv){
     pthread_mutex_destroy(&nready.mutex);
     pthread_mutex_destroy(&put.mutex);
     pthread_cond_destroy(&nready.cond);
-    pthread_exit (NULL);
+    pthread_exit(NULL);
 
-    free(tab);
-
-
+    free(dictionary);
 }
 
+/*
+ * Watek producenta
+ */
 
-void producer(void *threadid){
+void *producer(void *threadid)
+{
     long taskid;
     taskid = (long)threadid;
-    for(int j=0; ;j++){
-        for(int h=0; h<10; h++){
-            for(int k=0; k<3; k++){
-                char* passToMD5 = MakePassword(tab[5], j, k, taskid);
+    for (int j = 0;; j++){
+        for (int h = 0; h < 10; h++){
+            for (int k = 0; k < 3; k++){
+                char *passToMD5 = MakePassword(dictionary[5], j, k, taskid);
                 printf("%s\n", passToMD5);
-                unsigned char digest[32];
-                MD5(passToMD5, strlen(passToMD5), (unsigned char*)&digest);  
-                free(passToMD5);     
-                char convertFromHex[32];
-                for(int i = 0; i < 16; i++)
-                    sprintf(&convertFromHex[i*2], "%02x", (unsigned int)digest[i]);
 
-                for(int i=0; i<numberOfLine; i++){
-                    if(dataFromFIle[i][32] == '0'){
-                        if(strncmp(dataFromFIle[i], convertFromHex, 32)==0){
-                            
+                unsigned char digest[32];
+                MD5(passToMD5, strlen(passToMD5), (unsigned char *)&digest);
+                free(passToMD5);
+                char convertFromHex[32];
+
+                for (int i = 0; i < 16; i++)
+                    sprintf(&convertFromHex[i * 2], "%02x", (unsigned int)digest[i]);
+
+                for (int i = 0; i < numberOfPasswordInFile; i++)
+                {
+                    if (password[i][32] == '0')
+                    {
+                        if (strncmp(password[i], convertFromHex, 32) == 0)
+                        {
+
                             printf("------------------SEND ---------------------------\n");
 
                             pthread_mutex_lock(&put.mutex);
-                            numberofBreakPass[put.number].numberOfBreakPass=h;
-                            numberofBreakPass[put.number].BreakPass=passToMD5;
+                            numberofBreakPass[put.number].numberOfBreakPass = h;
+                            numberofBreakPass[put.number].BreakPass = passToMD5;
                             put.number++;
                             pthread_mutex_unlock(&put.mutex);
 
                             pthread_mutex_lock(&nready.mutex);
-                            if (nready.nready == 0){
+                            if (nready.nready == 0)
+                            {
                                 pthread_cond_signal(&nready.cond);
                             }
-                            nready.nready++;    
+                            nready.nready++;
                             pthread_mutex_unlock(&nready.mutex);
                         }
-                        
                     }
                 }
             }
         }
-        
-
     }
-    pthread_exit (NULL);
+    pthread_exit(NULL);
 }
 
+/*
+ * Watek konsumenta
+ */
 
-void consumer(void *threadid){
-    for(int i=0; i<4; i++){
+void *consumer(void *threadid)
+{
+    for (int i = 0; i < 4; i++)
+    {
         pthread_mutex_lock(&nready.mutex);
-        while(nready.nready == 0)
+
+        while (nready.nready == 0)
             pthread_cond_wait(&nready.cond, &nready.mutex);
         nready.nready--;
-        dataFromFIle[i][33] == '1';
+        password[i][33] == '1';
         printf("Cracked password is:");
-        printf("%s \n", numberofBreakPass[put.number-1].BreakPass);
+        printf("%s \n", numberofBreakPass[put.number - 1].BreakPass);
+
         pthread_mutex_unlock(&nready.mutex);
     }
-    
-    pthread_exit (NULL);
-}
 
-void handler (int signal_number){
-    printf ("\n The number of broken passwords is %d\n \n", put.number);
-    for(int i=0; i<put.number-1; i++){
-        printf("%s \n", numberofBreakPass[put.number-1].BreakPass);
+    pthread_exit(NULL);
+}
+/*
+ * Handler dla sygnalu SIGHUP
+ */
+
+void handler(int signal_number)
+{
+    printf("\n The number of broken passwords is %d\n \n", put.number);
+    for (int i = 0; i < put.number - 1; i++)
+    {
+        printf("%s \n", numberofBreakPass[i].BreakPass);
     }
 }
 
+/*
+ * Funkcja odpowiedzialna za odpowiednie dobranie sekwecji generacji 
+ * hasla wzgledem numeru watku.
+ */
 
-char* MakePassword(char* password, int numner, int letter, int taskid){
-    char* toReturn;
+char *MakePassword(char *password, int iteration, int letterSize, int taskid)
+{
+    char *toReturn;
     switch (taskid)
     {
     case 0:
-        if(numner<1){
-            if(letter == 0)
-                toReturn = Dictionary(password, 1);
-            else if(letter == 1)
-                toReturn = Dictionary(password,2);
-            else if(letter == 2)
-                toReturn = Dictionary(password,3);
-        }else{
-            if(letter == 0)
-                toReturn = Generate(password, numner-1, 1,1);
-            else if(letter == 1)
-                toReturn = Generate(password, numner-1, 2,1);
-            else if(letter == 2)
-                toReturn = Generate(password, numner-1, 3,1);
+        if (iteration < 1)
+        {
+            if (letterSize == 0)
+                toReturn = GeneratePasswordFromDictionay(password, 1);
+            else if (letterSize == 1)
+                toReturn = GeneratePasswordFromDictionay(password, 2);
+            else if (letterSize == 2)
+                toReturn = GeneratePasswordFromDictionay(password, 3);
+        }
+        else
+        {
+            if (letterSize == 0)
+                toReturn = GeneratePassword(password, iteration - 1, 1, 1);
+            else if (letterSize == 1)
+                toReturn = GeneratePassword(password, iteration- 1, 2, 1);
+            else if (letterSize == 2)
+                toReturn = GeneratePassword(password, iteration - 1, 3, 1);
         }
         break;
     case 1:
-        if(letter == 0)
-            toReturn = Generate(password, numner, 2,1);
-        else if(letter == 1)
-            toReturn = Generate(password, numner, 2,2);
-        else if(letter == 2)
-            toReturn = Generate(password, numner, 2,3);
+        if (letterSize == 0)
+            toReturn = GeneratePassword(password, iteration, 2, 1);
+        else if (letterSize == 1)
+            toReturn = GeneratePassword(password, iteration, 2, 2);
+        else if (letterSize == 2)
+            toReturn = GeneratePassword(password, iteration, 2, 3);
         break;
     case 2:
-        if(letter == 0)
-            toReturn = Generate(password, numner, 3,1);
-        else if(letter == 1)
-            toReturn = Generate(password, numner, 3,2);
-        else if(letter == 2)
-            toReturn = Generate(password, numner, 3,3);
+        if (letterSize == 0)
+            toReturn = GeneratePassword(password, iteration, 3, 1);
+        else if (letterSize == 1)
+            toReturn = GeneratePassword(password, iteration, 3, 2);
+        else if (letterSize == 2)
+            toReturn = GeneratePassword(password, iteration, 3, 3);
         break;
     case 3:
-        toReturn = Generate(password, numner, 4,1);
+        toReturn = GeneratePassword(password, iteration, 4, 1);
         break;
-    
+
     default:
         printf("ERROR: Not enough number of thread");
         break;
     }
 
     return toReturn;
-
 }
 
+/*
+ * Funkcja odpowiedzialna za dodanie do ciagu znakowego char*  jednego
+ * char'a z przodu lub tylu zaleznie od opcji
+ */
 
-char *addToTab = "0123456789!@#$%^&*()";
-char* appendCharToCharArray(char* array, char a, int option)
+char *AddCharToCharArray(char *charArray, char a, int optionDirection)
 {
-    size_t len = strlen(array);
-    char* ret= (char *) calloc(len+2, sizeof(char));
-    if (option ==1) {
-        strcpy(ret, array);
-        ret[len] = a;
-        ret[len + 1] = '\0';
-    }
-    if (option ==2) {
-        for(int i=0; i<len+1; i++){
-            ret[i+1]=array[i];
-        }
-        ret[0] = a;
-        ret[len + 1] = '\0';
+    size_t lengthOfCharArray = strlen(charArray);
+    char *toReturn = (char *)calloc(lengthOfCharArray+ 2, sizeof(char));
+
+    if (optionDirection == 1)
+    {
+        strcpy(toReturn, charArray);
+        toReturn[lengthOfCharArray] = a;
+        toReturn[lengthOfCharArray + 1] = '\0';
     }
 
-    return ret;
-}
-
-
-char* Generate(char* password, int number78, int option, int letter) {
-    char toShow[20]={' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' '};
-    int number1=0, number2=0;
-    int number123456=0;
-    size_t length = strlen(password);
-    int tab[NUMBER] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-    number1 = number78;
-    for (int i = 0; i < NUMBER; i++) {
-        number2 = number1 % NUMBER;
-        number1 = number1 / NUMBER;
-        if (number2 != 0 || i == 0) {
-            tab[i] = number2;
-            number123456++;
+    if (optionDirection == 2)
+    {
+        for (int i = 0; i < lengthOfCharArray + 1; i++)
+        {
+            toReturn[i + 1] = charArray[i];
         }
+        toReturn[0] = a;
+        toReturn[lengthOfCharArray + 1] = '\0';
     }
 
-    char *toReturn;
-    char *tmp;
-    toReturn = (char *) calloc( (length+number123456), sizeof(char));
-    for (int i = 0; i < length; i++) {
-        if(letter == 1 )
-            toReturn[i] = password[i];
-
-        if(letter == 2){
-            toReturn[i] = password[i];
-            toReturn[0] = toupper(password[0]); 
-        }
-
-        if(letter == 3)
-            toReturn[i] = toupper(password[i]);
-    }
-
-    for (int i = 0; i < NUMBER; i++) {
-        int number = tab[i];
-        if (number != -1) {
-            toShow[i] = addToTab[number];
-        }
-    }
-
-    if(option == 1 || option == 2) {
-        for (int i = 0; i < number123456; i++) {
-            toReturn = appendCharToCharArray(toReturn, toShow[i], option);
-        }
-    }
-    if(option ==3 ){
-        for (int i = 0; i < number123456; i++) {
-            toReturn = appendCharToCharArray(toReturn, toShow[i], 1);
-        }
-        for (int i = 0; i < number123456; i++) {
-            toReturn = appendCharToCharArray(toReturn, toShow[i], 2);
-        }
-    }
-
-    if(option ==4 ) {
-        for (int i = 0; i < number123456; i++) {
-            toReturn= appendCharToCharArray(toReturn, toShow[i], 1);
-        }
-        for (int i = 0; i < length; i++) {
-            toReturn = appendCharToCharArray(toReturn, password[i], 1);
-        }
-
-    }
-
-        return toReturn;
-
-}
-
-char* Dictionary(char* password, int letter) {
-    size_t length = strlen(password);
-    char *toReturn;
-    char *tmp;
-    toReturn = (char *) calloc( length+1, sizeof(char));
-    for (int i = 0; i < length; i++) {
-        if(letter == 1 )
-            toReturn[i] = password[i];
-
-        if(letter == 2){
-            toReturn[i] = password[i];
-            toReturn[0] = toupper(password[0]); 
-        }
-
-        if(letter == 3)
-            toReturn[i] = toupper(password[i]);
-    }
-    toReturn[length+1] = '\0';
     return toReturn;
-
 }
 
-void getDataFromFile(char* dictionary, char* FileWithData){
-  FILE *handler;
-  char *buffer = NULL;
-  ssize_t nread;
-  size_t len = 0;
-  
-  if((handler = fopen(FileWithData, "r")) == NULL){
-    printf("Error! opening file\n");
-    exit(-1);
-  }
-  
-  numberOfLine=0;
-  while ((nread = getline(&buffer, &len, handler)) != -1) {
-    for(int i=0; i<32; i++){
-      dataFromFIle[numberOfLine][i]=buffer[i];
+/*
+ * Funkcja ktora genreuje hasla poprzez modyfikacje wielkosci liter oraz odpowiednim 
+ * dokladaniu znakow z przodu, z tylu lub tworzenie innego wozru.
+ */
+
+char *GeneratePassword(char *password, int numberOfIteration, int optionAddChar, int letterSize)
+{
+    char charToAdd[20] = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '};
+    int moduloNumber = 0;
+    int lengthOfCharToAdd = 0;
+    size_t lengthOfPassword = strlen(password);
+    int tab[NUMBER] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+
+    for (int i = 0; i < NUMBER; i++)
+    {
+        moduloNumber = numberOfIteration % NUMBER;
+        numberOfIteration = numberOfIteration / NUMBER;
+        if (moduloNumber != 0 || i == 0)
+        {
+            tab[i] = moduloNumber;
+            lengthOfCharToAdd++;
+        }
     }
-    dataFromFIle[numberOfLine][32]='0';
-    numberOfLine++;
-  }
 
-  fclose(handler);
-/*------------------------------------------------------------*/
-  FILE *handlerDictionary;
-  char *bufferDictionary = NULL;
-  ssize_t nreadDictionary;
-  size_t lenDictionary = 0;
-  numberLoop = 0;
-    if((handlerDictionary = fopen(dictionary, "r")) == NULL){
-    printf("Error! opening file\n");
-    exit(-1);
-  }
-  char buff[50];
-  fgets( buff, 50, handlerDictionary);
-  numberLoop = atoi(buff);
+    char *toReturn;
 
-  tab = (char**)malloc(sizeof(char *) * numberLoop);
-  int number =0;
-  while(nreadDictionary = getline(&bufferDictionary, &lenDictionary, handlerDictionary)!= -1) {
-    tab[number]=malloc(strlen(bufferDictionary));
-    strtok(bufferDictionary, "\n");
-    strcpy( tab[number], bufferDictionary);
-    (tab[number])[strlen(tab[number])-1]='\0';
-    number++;
-  }
-  fclose(handlerDictionary);
+    toReturn = (char *)calloc((lengthOfPassword + lengthOfCharToAdd), sizeof(char));
+    for (int i = 0; i < lengthOfPassword; i++)
+    {
+        if (letterSize == 1)
+            toReturn[i] = password[i];
 
+        if (letterSize == 2)
+        {
+            toReturn[i] = password[i];
+            toReturn[0] = toupper(password[0]);
+        }
+
+        if (letterSize == 3)
+            toReturn[i] = toupper(password[i]);
+    }
+
+    for (int i = 0; i < NUMBER; i++)
+    {
+        if (tab[i] != -1)
+        {
+            charToAdd[i] = addToTab[tab[i]];
+        }
+    }
+
+    if (optionAddChar == 1 || optionAddChar == 2)
+    {
+        for (int i = 0; i < lengthOfCharToAdd; i++)
+        {
+            toReturn = AddCharToCharArray(toReturn, charToAdd[i], optionAddChar);
+        }
+    }
+    if (optionAddChar == 3)
+    {
+        for (int i = 0; i < lengthOfCharToAdd; i++)
+        {
+            toReturn = AddCharToCharArray(toReturn, charToAdd[i], 1);
+        }
+        for (int i = 0; i < lengthOfCharToAdd; i++)
+        {
+            toReturn = AddCharToCharArray(toReturn, charToAdd[i], 2);
+        }
+    }
+
+    if (optionAddChar == 4)
+    {
+        for (int i = 0; i < lengthOfCharToAdd; i++)
+        {
+            toReturn = AddCharToCharArray(toReturn, charToAdd[i], 1);
+        }
+        for (int i = 0; i < lengthOfPassword; i++)
+        {
+            toReturn = AddCharToCharArray(toReturn, password[i], 1);
+        }
+    }
+
+    return toReturn;
+}
+
+/*
+ * Funkcja ktora tworzy haslo wylacznie zmieniaja wielkosc litter
+ * nie doklada rzadnych znakow.
+ */
+
+char *GeneratePasswordFromDictionay(char *password, int letterSize)
+{
+    size_t lengthOfPassword = strlen(password);
+    char *toReturn;
+
+    toReturn = (char *)calloc(lengthOfPassword + 1, sizeof(char));
+    for (int i = 0; i < lengthOfPassword; i++)
+    {
+        if (lengthOfPassword == 1)
+            toReturn[i] = password[i];
+
+        if (lengthOfPassword == 2)
+        {
+            toReturn[i] = password[i];
+            toReturn[0] = toupper(password[0]);
+        }
+
+        if (lengthOfPassword == 3)
+            toReturn[i] = toupper(password[i]);
+    }
+    toReturn[lengthOfPassword + 1] = '\0';
+    return toReturn;
+}
+
+/*
+ * Funkcja ktora sluzy do pobrania danych z slownika i 
+ * pliku z haslami MD5
+ */
+
+void GetDataFromFile(char *dictionaryFile, char *passwordFile)
+{
+    FILE *handlerPasswordFile;
+    char *bufferPasswordFile = NULL;
+    ssize_t nread;
+    size_t len = 0;
+
+    if ((handlerPasswordFile = fopen(passwordFile, "r")) == NULL)
+    {
+        printf("Error! opening file\n");
+        exit(-1);
+    }
+
+    numberOfPasswordInFile = 0;
+    while (getline(&bufferPasswordFile, &len, handlerPasswordFile) != -1)
+    {
+        for (int i = 0; i < 32; i++)
+        {
+            password[numberOfPasswordInFile][i] = bufferPasswordFile[i];
+        }
+        password[numberOfPasswordInFile][32] = '0';
+        numberOfPasswordInFile++;
+    }
+
+    fclose(handlerPasswordFile);
+    /*------------------------------------------------------------*/
+    /*                      DICTIONARY                            */
+    /*------------------------------------------------------------*/
+    FILE *handlerDictionaryFile;
+    char *bufferDictionaryFile = NULL;
+    ssize_t nreadDictionary;
+    size_t lenDictionary = 0;
+    numberOfDictionaryFile = 0;
+    if ((handlerDictionaryFile = fopen(dictionaryFile, "r")) == NULL)
+    {
+        printf("Error! opening file\n");
+        exit(-1);
+    }
+    char firstLine[50];
+    fgets(firstLine, 50, handlerDictionaryFile);
+    numberOfDictionaryFile = atoi(firstLine);
+
+    dictionary = (char **)malloc(sizeof(char *) * numberOfDictionaryFile);
+
+    int i = 0;
+    while (nreadDictionary = getline(&bufferDictionaryFile, &lenDictionary, handlerDictionaryFile) != -1)
+    {
+        dictionary[i] = malloc(strlen(bufferDictionaryFile));
+        strtok(bufferDictionaryFile, "\n");
+        strcpy(dictionary[i], bufferDictionaryFile);
+        (dictionary[i])[strlen(dictionary[i]) - 1] = '\0';
+        i++;
+    }
+    fclose(handlerDictionaryFile);
 }
 
