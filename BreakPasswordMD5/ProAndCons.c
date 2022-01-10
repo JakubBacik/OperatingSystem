@@ -12,7 +12,10 @@
 # define NUMBER 20 
 
 /*TESTOWE DANE*/
-char password[3][33] = {"1d7c2923c1684726dc23d2901c4d81570", "2c4c8979a63e1eb71c23ae173a60dd0c0", "458a02ad1a0f57f6d335098e1c631f040" };;
+char dataFromFIle[1000][33];
+char** tab;
+int numberOfLine=0;
+int numberLoop = 0;
 
 char* slownik[10] = {"adam", "marek", "jan", "kuba", "michal", "adrian", "ola", "jacek", "mariola", "weronika"};
 
@@ -27,6 +30,7 @@ char* Generate(char* password, int number78, int option, int letter);
 char* appendCharToCharArray(char* array, char a, int option);
 char* MakePassword(char* password, int numner, int letter,  int taskid);
 char* Dictionary(char* password, int letter);
+void getDataFromFile(char* dictionary, char* FileWithData);
 struct Data
 {
     int numberOfBreakPass;
@@ -57,6 +61,7 @@ int main(int argc, char **argv){
     }
 
     pthread_t tid_producer[NUMBEROFPRODUCER], tid_consumer;
+    getDataFromFile("words_alpha.txt", "dataMD5.txt");
 
     /* create all producers and one consumer */
     for(int t=0; t<NUMBEROFPRODUCER; t++) {
@@ -87,10 +92,10 @@ int main(int argc, char **argv){
 void producer(void *threadid){
     long taskid;
     taskid = (long)threadid;
-    for(int j=0;;j++){
-        for(int h=0; h<10; h++){
+    for(int j=0;j<8;j++){
+        for(int h=0; h<numberLoop; h++){
             for(int k=0; k<3; k++){
-                char* passToMD5 = MakePassword(slownik[h], j, k, taskid);
+                char* passToMD5 = MakePassword(tab[h], j, k, taskid);
                 printf("%s\n", passToMD5);
         
                 unsigned char digest[32];
@@ -100,11 +105,11 @@ void producer(void *threadid){
                 for(int i = 0; i < 16; i++)
                     sprintf(&convertFromHex[i*2], "%02x", (unsigned int)digest[i]);
 
-                for(int i=0; i<3; i++){
-                    if(password[i][32] == '0'){
-                        if(strncmp(password[i], convertFromHex, 32)==0){
+                for(int i=0; i<numberOfLine; i++){
+                    if(dataFromFIle[i][32] == '0'){
+                        if(strncmp(dataFromFIle[i], convertFromHex, 32)==0){
                             
-                            printf("Wyslanie\n");
+                            printf("------------------SEND ---------------------------\n");
 
                             pthread_mutex_lock(&put.mutex);
                             numberofBreakPass[put.number].numberOfBreakPass=h;
@@ -137,7 +142,7 @@ void consumer(void *threadid){
         while(nready.nready == 0)
             pthread_cond_wait(&nready.cond, &nready.mutex);
         nready.nready--;
-        password[i][33] == '0';
+        dataFromFIle[i][33] == '1';
         printf("Cracked password is:");
         printf("%s \n", numberofBreakPass[put.number-1].BreakPass);
         pthread_mutex_unlock(&nready.mutex);
@@ -170,9 +175,9 @@ char* MakePassword(char* password, int numner, int letter, int taskid){
             if(letter == 0)
                 toReturn = Generate(password, numner-1, 1,1);
             else if(letter == 1)
-                toReturn = Generate(password, numner-1, 1,2);
+                toReturn = Generate(password, numner-1, 2,1);
             else if(letter == 2)
-                toReturn = Generate(password, numner-1, 1,3);
+                toReturn = Generate(password, numner-1, 3,1);
         }
         break;
     case 1:
@@ -185,14 +190,14 @@ char* MakePassword(char* password, int numner, int letter, int taskid){
         break;
     case 2:
         if(letter == 0)
-            toReturn = Generate(password, numner, 2,1);
+            toReturn = Generate(password, numner, 3,1);
         else if(letter == 1)
-            toReturn = Generate(password, numner, 2,2);
+            toReturn = Generate(password, numner, 3,2);
         else if(letter == 2)
-            toReturn = Generate(password, numner, 2,3);
+            toReturn = Generate(password, numner, 3,3);
         break;
     case 3:
-        toReturn = Generate(password, numner, 1,4);
+        toReturn = Generate(password, numner, 4,1);
         break;
     
     default:
@@ -312,8 +317,57 @@ char* Dictionary(char* password, int letter) {
             toReturn[i] = toupper(password[i]);
     }
     toReturn[length+1] = '\0';
-    return toReturn;
+    tmp =toReturn;
+    free(toReturn);
+    return tmp;
 
 }
 
+void getDataFromFile(char* dictionary, char* FileWithData){
+  FILE *handler;
+  char *buffer = NULL;
+  ssize_t nread;
+  size_t len = 0;
+  
+  if((handler = fopen(FileWithData, "r")) == NULL){
+    printf("Error! opening file\n");
+    exit(-1);
+  }
+  
+  numberOfLine=0;
+  while ((nread = getline(&buffer, &len, handler)) != -1) {
+    for(int i=0; i<32; i++){
+      dataFromFIle[numberOfLine][i]=buffer[i];
+    }
+    dataFromFIle[numberOfLine][32]='0';
+    numberOfLine++;
+  }
+
+  fclose(handler);
+/*------------------------------------------------------------*/
+  FILE *handlerDictionary;
+  char *bufferDictionary = NULL;
+  ssize_t nreadDictionary;
+  size_t lenDictionary = 0;
+  numberLoop = 0;
+    if((handlerDictionary = fopen(dictionary, "r")) == NULL){
+    printf("Error! opening file\n");
+    exit(-1);
+  }
+  char buff[50];
+  fgets( buff, 50, handlerDictionary);
+  numberLoop = atoi(buff);
+
+  tab = (char**)malloc(sizeof(char *) * numberLoop);
+  int number =0;
+  while(nreadDictionary = getline(&bufferDictionary, &lenDictionary, handlerDictionary)!= -1) {
+    tab[number]=malloc ( strlen(bufferDictionary));
+    strtok(bufferDictionary, "\n");
+    strcpy( tab[number], bufferDictionary);
+    (tab[number])[strlen(tab[number])-1]='\0';
+    number++;
+  }
+  fclose(handlerDictionary);
+
+}
 
