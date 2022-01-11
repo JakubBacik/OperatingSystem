@@ -85,15 +85,16 @@ void *mainThread(void *threadid){
     }
     pthread_create(&tid_consumer, NULL, consumer, NULL);
     while(1){
-        if(scanf("%s", &newFileFromPassword)>0){
-            pthread_kill(tid_consumer, SIGHUP);
-            pthread_kill(tid_producer[0], SIGHUP);
-            pthread_kill(tid_producer[1], SIGHUP);
-            pthread_kill(tid_producer[2], SIGHUP);
-            pthread_kill(tid_producer[3], SIGHUP);
+        if(scanf("%s", newFileFromPassword)>0){
+            pthread_kill(tid_consumer, SIGINT);
+            pthread_kill(tid_producer[0], SIGINT);
+            pthread_kill(tid_producer[1], SIGINT);
+            pthread_kill(tid_producer[2], SIGINT);
+            pthread_kill(tid_producer[3], SIGINT);
             for(int i=0; i<numberOfPasswordInFile;i++){
                 free(dictionary[i]);
             }
+            
             GetDataFromFile("words_alpha.txt", newFileFromPassword);
             for (int t = 0; t < NUMBEROFPRODUCER; t++)
             {
@@ -158,8 +159,9 @@ void *producer(void *threadid)
                             pthread_mutex_unlock(&nready.mutex);
                         }
                     }
+                    
                 }
-                
+                free(passToMD5);
             }
         }
     }
@@ -294,6 +296,7 @@ char *AddCharToCharArray(char *charArray, char a, int optionDirection)
         toReturn[0] = a;
         toReturn[lengthOfCharArray + 1] = '\0';
     }
+    free(charArray);
 
     return toReturn;
 }
