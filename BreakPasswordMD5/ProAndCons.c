@@ -1,3 +1,7 @@
+/*
+ * Github: https://github.com/JakubBacik/OperatingSystem/tree/main/BreakPasswordMD5
+ */
+
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,7 +20,7 @@ char password[1000][33];
 char **dictionary;
 int numberOfPasswordInFile = 0;
 int numberOfDictionaryFile = 0;
-char newFileFromPassword[100] = "dataMD5.txt";
+char newFileFromPassword[100] = "pass.txt";
 
 void *producer(void *threadid);
 void *consumer(void *threadid);
@@ -29,13 +33,9 @@ char *GeneratePasswordFromDictionay(char *password, int letterSize);
 void GetDataFromFile(char *dictionaryFile, char *passwordFile);
 
 
-struct Data
-{
-    int numberOfBreakPass;
-    char *BreakPass;
-};
-
-struct Data numberofBreakPass[1000];
+char* numberofBreakPass[1000];
+int numberOfMD5[1000];
+int number=0;
 struct
 {
     pthread_mutex_t mutex;
@@ -46,7 +46,6 @@ struct
 struct
 {
     pthread_mutex_t mutex;
-    int number; /* next index to store */
     int toShow;
 } put = {PTHREAD_MUTEX_INITIALIZER};
 
@@ -68,7 +67,9 @@ int main(int argc, char **argv)
     pthread_join(tid_mainThread, NULL);
     free(dictionary);
 }
-
+/*
+ * Watek glowny
+ */
 void *mainThread(void *threadid){
     GetDataFromFile("words_alpha.txt", newFileFromPassword);
     pthread_t tid_producer[NUMBEROFPRODUCER], tid_consumer;
@@ -126,15 +127,12 @@ void *producer(void *threadid)
     long taskid;
     taskid = (long)threadid;
     for (int j = 0; ; j++){
-        for (int h = 0; h < 200; h++){
+        for (int h = 0; h < numberOfDictionaryFile; h++){
             for (int k = 0; k < 3; k++){
                 char *passToMD5 = MakePassword(dictionary[h], j, k, taskid);
-
                 unsigned char digest[32];
                 MD5(passToMD5, strlen(passToMD5), (unsigned char *)&digest);
-                free(passToMD5);
                 char convertFromHex[32];
-
                 for (int i = 0; i < 16; i++)
                     sprintf(&convertFromHex[i * 2], "%02x", (unsigned int)digest[i]);
 
@@ -144,10 +142,9 @@ void *producer(void *threadid)
                     {
                         if (strncmp(password[i], convertFromHex, 32) == 0)
                         {
-                            pthread_mutex_lock(&put.mutex);
-                            numberofBreakPass[put.number].numberOfBreakPass = h;
-                            numberofBreakPass[put.number].BreakPass = passToMD5;
-                            put.number++;
+                            numberOfMD5[number] = i;
+                            numberofBreakPass[number]  = passToMD5;
+                            number++;
                             pthread_mutex_unlock(&put.mutex);
 
                             pthread_mutex_lock(&nready.mutex);
@@ -160,9 +157,11 @@ void *producer(void *threadid)
                         }
                     }
                 }
+                free(passToMD5);
             }
         }
     }
+    //printf("%s\n", numberofBreakPass[0].BreakPass);
     pthread_exit(NULL);
 }
 
@@ -176,13 +175,15 @@ void *consumer(void *threadid)
     {
         pthread_mutex_lock(&nready.mutex);
 
-        while (nready.nready == 0)
-            pthread_cond_wait(&nready.cond, &nready.mutex);
+        while(nready.nready == 0) 
+         pthread_cond_wait(&nready.cond, &nready.mutex);
+
         nready.nready--;
-        
+
         printf("Cracked password is:");
-        printf("%s \n", numberofBreakPass[put.number - 1].BreakPass);
-        password[numberofBreakPass[put.number].numberOfBreakPass][32] == '1';
+        printf("%s\n", numberofBreakPass[number-1]);
+        password[numberOfMD5[number-1]][32] == '1';
+        
         pthread_mutex_unlock(&nready.mutex);
     }
 
@@ -194,10 +195,10 @@ void *consumer(void *threadid)
 
 void handler(int signal_number)
 {
-    printf("\n The number of broken passwords is %d\n \n", put.number);
-    for (int i = 0; i < put.number - 1; i++)
+    printf("\n The number of broken passwords is %d\n \n", number);
+    for (int i = 0; i < number - 1; i++)
     {
-        printf("%s \n", numberofBreakPass[i].BreakPass);
+        printf("%s \n", numberofBreakPass[i]);
     }
 }
 
@@ -214,8 +215,9 @@ char *MakePassword(char *password, int iteration, int letterSize, int taskid)
     case 0:
         if (iteration < 1)
         {
-            if (letterSize == 0)
+            if (letterSize == 0){
                 toReturn = GeneratePasswordFromDictionay(password, 1);
+            }
             else if (letterSize == 1)
                 toReturn = GeneratePasswordFromDictionay(password, 2);
             else if (letterSize == 2)
@@ -252,7 +254,7 @@ char *MakePassword(char *password, int iteration, int letterSize, int taskid)
         break;
 
     default:
-        printf("ERROR: Not enough number of thread");
+        printf("ERROR: Not enough number of thread\n");
         break;
     }
 
@@ -380,22 +382,24 @@ char *GeneratePassword(char *password, int numberOfIteration, int optionAddChar,
 
 char *GeneratePasswordFromDictionay(char *password, int letterSize)
 {
+
     size_t lengthOfPassword = strlen(password);
     char *toReturn;
 
     toReturn = (char *)calloc(lengthOfPassword + 1, sizeof(char));
     for (int i = 0; i < lengthOfPassword; i++)
     {
-        if (lengthOfPassword == 1)
+        if (letterSize == 1){
             toReturn[i] = password[i];
+        }
 
-        if (lengthOfPassword == 2)
+        if (letterSize == 2)
         {
             toReturn[i] = password[i];
             toReturn[0] = toupper(password[0]);
         }
 
-        if (lengthOfPassword == 3)
+        if (letterSize == 3)
             toReturn[i] = toupper(password[i]);
     }
     toReturn[lengthOfPassword + 1] = '\0';
