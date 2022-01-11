@@ -20,7 +20,7 @@ char password[1000][33];
 char **dictionary;
 int numberOfPasswordInFile = 0;
 int numberOfDictionaryFile = 0;
-char newFileFromPassword[100] = "pass.txt";
+char newFileFromPassword[100] = "dataMD5.txt";
 
 void *producer(void *threadid);
 void *consumer(void *threadid);
@@ -65,7 +65,6 @@ int main(int argc, char **argv)
     pthread_create(&tid_mainThread, NULL, mainThread, NULL);
 
     pthread_join(tid_mainThread, NULL);
-    free(dictionary);
 }
 /*
  * Watek glowny
@@ -92,6 +91,9 @@ void *mainThread(void *threadid){
             pthread_kill(tid_producer[1], SIGHUP);
             pthread_kill(tid_producer[2], SIGHUP);
             pthread_kill(tid_producer[3], SIGHUP);
+            for(int i=0; i<numberOfPasswordInFile;i++){
+                free(dictionary[i]);
+            }
             GetDataFromFile("words_alpha.txt", newFileFromPassword);
             for (int t = 0; t < NUMBEROFPRODUCER; t++)
             {
@@ -127,7 +129,7 @@ void *producer(void *threadid)
     long taskid;
     taskid = (long)threadid;
     for (int j = 0; ; j++){
-        for (int h = 0; h < numberOfDictionaryFile; h++){
+        for (int h = 0; h < numberOfDictionaryFile-1; h++){
             for (int k = 0; k < 3; k++){
                 char *passToMD5 = MakePassword(dictionary[h], j, k, taskid);
                 unsigned char digest[32];
@@ -157,11 +159,10 @@ void *producer(void *threadid)
                         }
                     }
                 }
-                free(passToMD5);
+                
             }
         }
     }
-    //printf("%s\n", numberofBreakPass[0].BreakPass);
     pthread_exit(NULL);
 }
 
@@ -235,22 +236,27 @@ char *MakePassword(char *password, int iteration, int letterSize, int taskid)
         break;
     case 1:
         if (letterSize == 0)
-            toReturn = GeneratePassword(password, iteration, 2, 1);
+            toReturn = GeneratePassword(password, iteration, 1, 2);
         else if (letterSize == 1)
             toReturn = GeneratePassword(password, iteration, 2, 2);
         else if (letterSize == 2)
-            toReturn = GeneratePassword(password, iteration, 2, 3);
+            toReturn = GeneratePassword(password, iteration, 3, 2);
         break;
     case 2:
         if (letterSize == 0)
-            toReturn = GeneratePassword(password, iteration, 3, 1);
+            toReturn = GeneratePassword(password, iteration, 1, 3);
         else if (letterSize == 1)
-            toReturn = GeneratePassword(password, iteration, 3, 2);
+            toReturn = GeneratePassword(password, iteration, 2, 3);
         else if (letterSize == 2)
             toReturn = GeneratePassword(password, iteration, 3, 3);
         break;
     case 3:
-        toReturn = GeneratePassword(password, iteration, 4, 1);
+        if (letterSize == 0)
+            toReturn = GeneratePassword(password, iteration, 4, 1);
+        else if (letterSize == 1)
+            toReturn = GeneratePassword(password, iteration, 4, 2);
+        else if (letterSize == 2)
+            toReturn = GeneratePassword(password, iteration, 4, 3);
         break;
 
     default:
@@ -269,7 +275,8 @@ char *MakePassword(char *password, int iteration, int letterSize, int taskid)
 char *AddCharToCharArray(char *charArray, char a, int optionDirection)
 {
     size_t lengthOfCharArray = strlen(charArray);
-    char *toReturn = (char *)calloc(lengthOfCharArray+ 2, sizeof(char));
+
+    char* toReturn = malloc(sizeof(char)* (lengthOfCharArray+ 2));
 
     if (optionDirection == 1)
     {
@@ -296,12 +303,12 @@ char *AddCharToCharArray(char *charArray, char a, int optionDirection)
  * dokladaniu znakow z przodu, z tylu lub tworzenie innego wozru.
  */
 
-char *GeneratePassword(char *password, int numberOfIteration, int optionAddChar, int letterSize)
+char *GeneratePassword(char *passwordToGenerate, int numberOfIteration, int optionAddChar, int letterSize)
 {
     char charToAdd[20] = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '};
     int moduloNumber = 0;
     int lengthOfCharToAdd = 0;
-    size_t lengthOfPassword = strlen(password);
+    size_t lengthOfPassword = strlen(passwordToGenerate);
     int tab[NUMBER] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
     for (int i = 0; i < NUMBER; i++)
@@ -316,22 +323,23 @@ char *GeneratePassword(char *password, int numberOfIteration, int optionAddChar,
     }
 
     char *toReturn;
+    toReturn = malloc(sizeof(char) * (lengthOfPassword + lengthOfCharToAdd));
 
-    toReturn = (char *)calloc((lengthOfPassword + lengthOfCharToAdd), sizeof(char));
     for (int i = 0; i < lengthOfPassword; i++)
     {
         if (letterSize == 1)
-            toReturn[i] = password[i];
+            toReturn[i] = passwordToGenerate[i];
 
         if (letterSize == 2)
         {
-            toReturn[i] = password[i];
-            toReturn[0] = toupper(password[0]);
+            toReturn[i] = passwordToGenerate[i];
+            toReturn[0] = toupper(passwordToGenerate[0]);
         }
 
         if (letterSize == 3)
-            toReturn[i] = toupper(password[i]);
+            toReturn[i] = toupper(passwordToGenerate[i]);
     }
+
 
     for (int i = 0; i < NUMBER; i++)
     {
@@ -368,7 +376,7 @@ char *GeneratePassword(char *password, int numberOfIteration, int optionAddChar,
         }
         for (int i = 0; i < lengthOfPassword; i++)
         {
-            toReturn = AddCharToCharArray(toReturn, password[i], 1);
+            toReturn = AddCharToCharArray(toReturn, passwordToGenerate[i], 1);
         }
     }
 
@@ -380,29 +388,31 @@ char *GeneratePassword(char *password, int numberOfIteration, int optionAddChar,
  * nie doklada rzadnych znakow.
  */
 
-char *GeneratePasswordFromDictionay(char *password, int letterSize)
+char *GeneratePasswordFromDictionay(char *passwordOfDictionary, int letterSize)
 {
 
-    size_t lengthOfPassword = strlen(password);
+    size_t lengthOfPassword = strlen(passwordOfDictionary);
     char *toReturn;
+    
+    toReturn = malloc(sizeof(char) * (lengthOfPassword + 1));
 
-    toReturn = (char *)calloc(lengthOfPassword + 1, sizeof(char));
     for (int i = 0; i < lengthOfPassword; i++)
     {
         if (letterSize == 1){
-            toReturn[i] = password[i];
+            toReturn[i] =passwordOfDictionary[i];
         }
 
         if (letterSize == 2)
         {
-            toReturn[i] = password[i];
-            toReturn[0] = toupper(password[0]);
+            toReturn[i] = passwordOfDictionary[i];
+            toReturn[0] = toupper(passwordOfDictionary[0]);
         }
 
         if (letterSize == 3)
-            toReturn[i] = toupper(password[i]);
+            toReturn[i] = toupper(passwordOfDictionary[i]);
     }
-    toReturn[lengthOfPassword + 1] = '\0';
+ 
+    toReturn[lengthOfPassword] = '\0';
     return toReturn;
 }
 
@@ -458,7 +468,7 @@ void GetDataFromFile(char *dictionaryFile, char *passwordFile)
     int i = 0;
     while (nreadDictionary = getline(&bufferDictionaryFile, &lenDictionary, handlerDictionaryFile) != -1)
     {
-        dictionary[i] = malloc(strlen(bufferDictionaryFile));
+        dictionary[i] = malloc(sizeof(char) * strlen(bufferDictionaryFile));
         strtok(bufferDictionaryFile, "\n");
         strcpy(dictionary[i], bufferDictionaryFile);
         (dictionary[i])[strlen(dictionary[i]) - 1] = '\0';
