@@ -35,7 +35,7 @@ void GetDataFromFile(char *dictionaryFile, char *passwordFile);
 
 char* numberofBreakPass[1000];
 int numberOfMD5[1000];
-int number=0;
+int numberBreakPass=0;
 struct
 {
     pthread_mutex_t mutex;
@@ -94,6 +94,9 @@ void *mainThread(void *threadid){
             for(int i=0; i<numberOfPasswordInFile;i++){
                 free(dictionary[i]);
             }
+            for(int i=0; i<numberBreakPass;i++){
+                free(numberofBreakPass[i]);
+            }
             
             GetDataFromFile("words_alpha.txt", newFileFromPassword);
             for (int t = 0; t < NUMBEROFPRODUCER; t++)
@@ -145,9 +148,11 @@ void *producer(void *threadid)
                     {
                         if (strncmp(password[i], convertFromHex, 32) == 0)
                         {
-                            numberOfMD5[number] = i;
-                            numberofBreakPass[number]  = passToMD5;
-                            number++;
+                            char* tmp = malloc(sizeof(char)* (strlen(MD5)));
+                            strcpy(tmp, passToMD5);
+                            numberOfMD5[numberBreakPass] = i;
+                            numberofBreakPass[numberBreakPass]  = tmp;
+                            numberBreakPass++;
                             pthread_mutex_unlock(&put.mutex);
 
                             pthread_mutex_lock(&nready.mutex);
@@ -184,9 +189,9 @@ void *consumer(void *threadid)
         nready.nready--;
 
         printf("Cracked password is:");
-        printf("%s\n", numberofBreakPass[number-1]);
-        password[numberOfMD5[number-1]][32] == '1';
-        
+        printf("%s\n", numberofBreakPass[numberBreakPass-1]);
+
+        password[numberOfMD5[numberBreakPass-1]][32] = '1';
         pthread_mutex_unlock(&nready.mutex);
     }
 
@@ -198,9 +203,13 @@ void *consumer(void *threadid)
 
 void handler(int signal_number)
 {
-    printf("\n The number of broken passwords is %d\n \n", number);
-    for (int i = 0; i < number - 1; i++)
+    printf("\nThe number of broken passwords is %d\n", numberBreakPass);
+    for (int i = 0; i < numberBreakPass; i++)
     {
+        for(int j=0; j<33; j++){
+            printf("%c", password[numberOfMD5[i]][j]);
+        }
+        printf("  ");
         printf("%s \n", numberofBreakPass[i]);
     }
 }
