@@ -130,43 +130,45 @@ void *mainThread(void *threadid){
 
 void *producer(void *threadid)
 {
-    long taskid;
-    taskid = (long)threadid;
-    for (int j = 0; ; j++){
-        for (int h = 0; h < numberOfDictionaryFile-1; h++){
-            for (int k = 0; k < 3; k++){
-                char *passToMD5 = MakePassword(dictionary[h], j, k, taskid);
-                unsigned char digest[32];
-                MD5(passToMD5, strlen(passToMD5), (unsigned char *)&digest);
-                char convertFromHex[32];
-                for (int i = 0; i < 16; i++)
-                    sprintf(&convertFromHex[i * 2], "%02x", (unsigned int)digest[i]);
+    if(numberBreakPass <= numberOfPasswordInFile){
+        long taskid;
+        taskid = (long)threadid;
+        for (int j = 0; ; j++){
+            for (int h = 0; h < numberOfDictionaryFile-1; h++){
+                for (int k = 0; k < 3; k++){
+                    char *passToMD5 = MakePassword(dictionary[h], j, k, taskid);
+                    unsigned char digest[32];
+                    MD5(passToMD5, strlen(passToMD5), (unsigned char *)&digest);
+                    char convertFromHex[32];
+                    for (int i = 0; i < 16; i++)
+                        sprintf(&convertFromHex[i * 2], "%02x", (unsigned int)digest[i]);
 
-                for (int i = 0; i < numberOfPasswordInFile; i++)
-                {
-                    if (password[i][32] == '0')
+                    for (int i = 0; i < numberOfPasswordInFile; i++)
                     {
-                        if (strncmp(password[i], convertFromHex, 32) == 0)
+                        if (password[i][32] == '0')
                         {
-                            char* tmp = malloc(sizeof(char)* (strlen(MD5)));
-                            strcpy(tmp, passToMD5);
-                            numberOfMD5[numberBreakPass] = i;
-                            numberofBreakPass[numberBreakPass]  = tmp;
-                            numberBreakPass++;
-                            pthread_mutex_unlock(&put.mutex);
-
-                            pthread_mutex_lock(&nready.mutex);
-                            if (nready.nready == 0)
+                            if (strncmp(password[i], convertFromHex, 32) == 0)
                             {
-                                pthread_cond_signal(&nready.cond);
+                                char* tmp = malloc(sizeof(char)* (strlen(passToMD5)));
+                                strcpy(tmp, passToMD5);
+                                numberOfMD5[numberBreakPass] = i;
+                                numberofBreakPass[numberBreakPass]  = tmp;
+                                numberBreakPass++;
+                                pthread_mutex_unlock(&put.mutex);
+
+                                pthread_mutex_lock(&nready.mutex);
+                                if (nready.nready == 0)
+                                {
+                                    pthread_cond_signal(&nready.cond);
+                                }
+                                nready.nready++;
+                                pthread_mutex_unlock(&nready.mutex);
                             }
-                            nready.nready++;
-                            pthread_mutex_unlock(&nready.mutex);
                         }
+                        
                     }
-                    
+                    free(passToMD5);
                 }
-                free(passToMD5);
             }
         }
     }
@@ -179,20 +181,22 @@ void *producer(void *threadid)
 
 void *consumer(void *threadid)
 {
-    while (1)
-    {
-        pthread_mutex_lock(&nready.mutex);
+    if(numberBreakPass <= numberOfPasswordInFile){
+        while (1)
+        {
+            pthread_mutex_lock(&nready.mutex);
 
-        while(nready.nready == 0) 
-         pthread_cond_wait(&nready.cond, &nready.mutex);
+            while(nready.nready == 0) 
+            pthread_cond_wait(&nready.cond, &nready.mutex);
 
-        nready.nready--;
+            nready.nready--;
 
-        printf("Cracked password is:");
-        printf("%s\n", numberofBreakPass[numberBreakPass-1]);
+            printf("Cracked password is:");
+            printf("%s\n", numberofBreakPass[numberBreakPass-1]);
 
-        password[numberOfMD5[numberBreakPass-1]][32] = '1';
-        pthread_mutex_unlock(&nready.mutex);
+            password[numberOfMD5[numberBreakPass-1]][32] = '1';
+            pthread_mutex_unlock(&nready.mutex);
+        }
     }
 
     pthread_exit(NULL);
@@ -203,7 +207,8 @@ void *consumer(void *threadid)
 
 void handler(int signal_number)
 {
-    printf("\nThe number of broken passwords is %d\n", numberBreakPass);
+    printf("\n------------------ CURRENT STATUS ------------------ \n");
+    printf("The number of broken passwords is %d\n\n", numberBreakPass);
     for (int i = 0; i < numberBreakPass; i++)
     {
         for(int j=0; j<33; j++){
@@ -212,6 +217,8 @@ void handler(int signal_number)
         printf("  ");
         printf("%s \n", numberofBreakPass[i]);
     }
+    printf("---------------- END OF CURRENT STATUS ---------------- \n");
+    printf("\n");
 }
 
 /*
