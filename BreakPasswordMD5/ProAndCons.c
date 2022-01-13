@@ -152,6 +152,11 @@ void *mainThread(void *threadid){
             CreateThread();
         }
     }
+    for (int t = 0; t < NUMBEROFPRODUCER; t++){
+	    pthread_join(tid_producer[t], NULL);
+    }
+
+	pthread_join(tid_consumer, NULL);
 
     pthread_exit(NULL);
 }
