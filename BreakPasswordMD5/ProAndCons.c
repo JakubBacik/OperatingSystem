@@ -1,6 +1,3 @@
-/*
- * Github: https://github.com/JakubBacik/OperatingSystem/tree/main/BreakPasswordMD5
- */
 
 #include <pthread.h>
 #include <stdio.h>
@@ -25,20 +22,24 @@ int numberOfDictionaryFile = 0;
 char newFileFromPassword[100] = "pass.txt";
 
 void *producer(void *threadid);
-void handler1(int signum);
+void handlerForKillThread(int signum);
 void *consumer(void *threadid);
-void handler(int signal_number);
+void handlerForSIGHUP(int signal_number);
 void *mainThread(void *threadid);
 char *MakePassword(char *password, int iteration, int letterSize, int taskid);
 char *AddCharToCharArray(char *charArray, char a, int optionDirection);
 char *GeneratePassword(char *password, int numberOfIteration, int optionAddChar, int letterSize);
 char *GeneratePasswordFromDictionay(char *password, int letterSize);
 void GetDataFromFile(char *dictionaryFile, char *passwordFile);
+void CreateThread();
+void CleanAndDealocationMemory();
+void SendPthreadKillAndWaitToDo();
 
 
 char* numberofBreakPass[1000];
 int numberOfMD5[1000];
 int numberBreakPass=0;
+
 struct
 {
     pthread_mutex_t mutex;
@@ -56,29 +57,33 @@ int main(int argc, char **argv)
 {
     struct sigaction act;
     memset(&act, 0, sizeof(act));
-    act.sa_handler = handler;
+    act.sa_handler = handlerForSIGHUP;
 
     if (sigaction(SIGHUP, &act, 0) < 0)
     {
         perror("sigaction");
         exit(-1);
     }
-    signal(SIGUSR1, handler1);
+    signal(SIGUSR1, handlerForKillThread);
 
     if (pthread_create(&tid_mainThread, NULL, mainThread, NULL) != 0) {
 		perror("pthread_create");
 		exit(1);
 	}
-     
 
     pthread_join(tid_mainThread, NULL);
+    pthread_mutex_destroy(&nready.mutex);
+    pthread_mutex_destroy(&put.mutex);
+    pthread_cond_destroy(&nready.cond);
+
+    return 0;
 }
+
 /*
- * Watek glowny
+ * Tworzy watki
  */
-void *mainThread(void *threadid){
-    GetDataFromFile("words_alpha.txt", newFileFromPassword);
-    /* create all producers and one consumer */
+
+void CreateThread(){
     for (int t = 0; t < NUMBEROFPRODUCER; t++)
     {
         printf("Main: creating thread %d\n", t);
@@ -89,50 +94,65 @@ void *mainThread(void *threadid){
             exit(-1);
         }
     }
+    printf("Main: creating consumer thread \n");
+    pthread_create(&tid_consumer, NULL, consumer, NULL);
+}
+
+/*
+ * Czyszczenie i dealokacja pamieci
+ */
+
+void CleanAndDealocationMemory(){
+    for(int i=0; i<numberOfDictionaryFile-1; i++){
+        free(dictionary[i]);
+                
+    }
+    for(int i=0; i<numberBreakPass-1; i++){
+        free(numberofBreakPass[i]);
+    }
+    pthread_mutex_unlock(&nready.mutex);
+    pthread_mutex_unlock(&put.mutex);
+    numberBreakPass=0;
+    numberOfDictionaryFile=0;
+    numberOfPasswordInFile=0;
+    nready.nready=0;
+}
+
+/*
+ * Wysyla informacje do watkow pthrea_exit i  czeka na wykonanie.
+ */
+
+void SendPthreadKillAndWaitToDo(){
+
+    for (int t = 0; t < NUMBEROFPRODUCER; t++){
+        pthread_kill(tid_producer[t], SIGUSR1);
+	    pthread_join(tid_producer[t], NULL);
+    }
+
+	pthread_kill(tid_consumer, SIGUSR1);
+	pthread_join(tid_consumer, NULL);
+
+}
+
+
+/*
+ * Watek glowny
+ */
+void *mainThread(void *threadid){
+    
+    GetDataFromFile("words_alpha.txt", newFileFromPassword);
+    CreateThread();
     pthread_create(&tid_consumer, NULL, consumer, NULL);
 
     while(1){
         if(scanf("%s", newFileFromPassword)>0){
-			pthread_kill(tid_producer[0], SIGUSR1);
-			pthread_join(tid_producer[0], NULL);
-			pthread_kill(tid_producer[1], SIGUSR1);
-			pthread_join(tid_producer[1], NULL);
-			pthread_kill(tid_producer[2], SIGUSR1);
-			pthread_join(tid_producer[2], NULL);
-			pthread_kill(tid_producer[3], SIGUSR1);
-			pthread_join(tid_producer[3], NULL);
-			pthread_kill(tid_consumer, SIGUSR1);
-			pthread_join(tid_consumer, NULL);
-            for(int i=0; i<numberOfDictionaryFile-1; i++){
-                free(dictionary[i]);
-                
-            }
-            for(int i=0; i<numberBreakPass-1; i++){
-                free(numberofBreakPass[i]);
-            }
-            pthread_mutex_unlock(&nready.mutex);
-            pthread_mutex_unlock(&put.mutex);
-            numberBreakPass=0;
-            numberOfDictionaryFile=0;
-            numberOfPasswordInFile=0;
-            nready.nready=0;
-
-    GetDataFromFile("words_alpha.txt", newFileFromPassword);
-            for (int t = 0; t < NUMBEROFPRODUCER; t++)
-    {
-        printf("Main: creating thread %d\n", t);
-        int rc = pthread_create(&tid_producer[t], NULL, producer, (void *)t);
-        if (rc)
-        {
-            printf("ERROR; return code from pthread_create() is %d\n", rc);
-            exit(-1);
+            SendPthreadKillAndWaitToDo();
+            CleanAndDealocationMemory();
+            GetDataFromFile("words_alpha.txt", newFileFromPassword);
+            CreateThread();
         }
     }
-    pthread_create(&tid_consumer, NULL, consumer, NULL);
 
-
-        }
-    }
     pthread_exit(NULL);
 }
 
@@ -192,7 +212,7 @@ void *producer(void *threadid)
  */
 
 void *consumer(void *threadid)
-{;
+{
     if(numberBreakPass <= numberOfPasswordInFile){
         while (1)
         {
@@ -212,9 +232,12 @@ void *consumer(void *threadid)
     pthread_exit(NULL);
 }
 
-void handler1(int signum)
+/*
+ * Handler dla sygnalu SIGUSR1
+ */
+
+void handlerForKillThread(int signum)
 {
-    printf("Wywolanie handlera\n");
 	pthread_exit(NULL);
 }
 
@@ -222,7 +245,7 @@ void handler1(int signum)
  * Handler dla sygnalu SIGHUP
  */
 
-void handler(int signal_number)
+void handlerForSIGHUP(int signal_number)
 {
     printf("\n------------------ CURRENT STATUS ------------------ \n");
     printf("The number of broken passwords is %d\n\n", numberBreakPass);
