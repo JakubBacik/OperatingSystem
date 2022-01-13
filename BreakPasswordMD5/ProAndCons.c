@@ -15,14 +15,17 @@
 #define NUMBEROFPRODUCER 4
 #define NUMBER 20
 
+pthread_t tid_producer[NUMBEROFPRODUCER], tid_consumer, tid_mainThread;
+
 char *addToTab = "0123456789!@#$%^&*()";
 char password[1000][33];
 char **dictionary;
 int numberOfPasswordInFile = 0;
 int numberOfDictionaryFile = 0;
-char newFileFromPassword[100] = "dataMD5.txt";
+char newFileFromPassword[100] = "pass.txt";
 
 void *producer(void *threadid);
+void handler1(int signum);
 void *consumer(void *threadid);
 void handler(int signal_number);
 void *mainThread(void *threadid);
@@ -60,9 +63,13 @@ int main(int argc, char **argv)
         perror("sigaction");
         exit(-1);
     }
+    signal(SIGUSR1, handler1);
 
-    pthread_t tid_mainThread;
-    pthread_create(&tid_mainThread, NULL, mainThread, NULL);
+    if (pthread_create(&tid_mainThread, NULL, mainThread, NULL) != 0) {
+		perror("pthread_create");
+		exit(1);
+	}
+     
 
     pthread_join(tid_mainThread, NULL);
 }
@@ -71,7 +78,6 @@ int main(int argc, char **argv)
  */
 void *mainThread(void *threadid){
     GetDataFromFile("words_alpha.txt", newFileFromPassword);
-    pthread_t tid_producer[NUMBEROFPRODUCER], tid_consumer;
     /* create all producers and one consumer */
     for (int t = 0; t < NUMBEROFPRODUCER; t++)
     {
@@ -84,43 +90,49 @@ void *mainThread(void *threadid){
         }
     }
     pthread_create(&tid_consumer, NULL, consumer, NULL);
+
     while(1){
         if(scanf("%s", newFileFromPassword)>0){
-            pthread_kill(tid_consumer, SIGINT);
-            pthread_kill(tid_producer[0], SIGINT);
-            pthread_kill(tid_producer[1], SIGINT);
-            pthread_kill(tid_producer[2], SIGINT);
-            pthread_kill(tid_producer[3], SIGINT);
-            for(int i=0; i<numberOfPasswordInFile;i++){
+			pthread_kill(tid_producer[0], SIGUSR1);
+			pthread_join(tid_producer[0], NULL);
+			pthread_kill(tid_producer[1], SIGUSR1);
+			pthread_join(tid_producer[1], NULL);
+			pthread_kill(tid_producer[2], SIGUSR1);
+			pthread_join(tid_producer[2], NULL);
+			pthread_kill(tid_producer[3], SIGUSR1);
+			pthread_join(tid_producer[3], NULL);
+			pthread_kill(tid_consumer, SIGUSR1);
+			pthread_join(tid_consumer, NULL);
+            for(int i=0; i<numberOfDictionaryFile-1; i++){
                 free(dictionary[i]);
+                
             }
-            for(int i=0; i<numberBreakPass;i++){
+            for(int i=0; i<numberBreakPass-1; i++){
                 free(numberofBreakPass[i]);
             }
-            
-            GetDataFromFile("words_alpha.txt", newFileFromPassword);
+            pthread_mutex_unlock(&nready.mutex);
+            pthread_mutex_unlock(&put.mutex);
+            numberBreakPass=0;
+            numberOfDictionaryFile=0;
+            numberOfPasswordInFile=0;
+            nready.nready=0;
+
+    GetDataFromFile("words_alpha.txt", newFileFromPassword);
             for (int t = 0; t < NUMBEROFPRODUCER; t++)
-            {
-                printf("Main: creating thread %d\n", t);
-                int rc = pthread_create(&tid_producer[t], NULL, producer, (void *)t);
-                if (rc){
-                    printf("ERROR; return code from pthread_create() is %d\n", rc);
-                    exit(-1);
-                }
-            }
-            pthread_create(&tid_consumer, NULL, consumer, NULL);
+    {
+        printf("Main: creating thread %d\n", t);
+        int rc = pthread_create(&tid_producer[t], NULL, producer, (void *)t);
+        if (rc)
+        {
+            printf("ERROR; return code from pthread_create() is %d\n", rc);
+            exit(-1);
         }
     }
-    /* wait for all producers and the consumer */
-    for (int i = 0; i < NUMBEROFPRODUCER; i++)
-    {
-        pthread_join(tid_producer[i], NULL);
-    }
-    pthread_join(tid_consumer, NULL);
+    pthread_create(&tid_consumer, NULL, consumer, NULL);
 
-    pthread_mutex_destroy(&nready.mutex);
-    pthread_mutex_destroy(&put.mutex);
-    pthread_cond_destroy(&nready.cond);
+
+        }
+    }
     pthread_exit(NULL);
 }
 
@@ -149,13 +161,13 @@ void *producer(void *threadid)
                         {
                             if (strncmp(password[i], convertFromHex, 32) == 0)
                             {
+                                pthread_mutex_lock(&put.mutex);
                                 char* tmp = malloc(sizeof(char)* (strlen(passToMD5)));
                                 strcpy(tmp, passToMD5);
                                 numberOfMD5[numberBreakPass] = i;
                                 numberofBreakPass[numberBreakPass]  = tmp;
                                 numberBreakPass++;
                                 pthread_mutex_unlock(&put.mutex);
-
                                 pthread_mutex_lock(&nready.mutex);
                                 if (nready.nready == 0)
                                 {
@@ -180,7 +192,7 @@ void *producer(void *threadid)
  */
 
 void *consumer(void *threadid)
-{
+{;
     if(numberBreakPass <= numberOfPasswordInFile){
         while (1)
         {
@@ -190,10 +202,8 @@ void *consumer(void *threadid)
             pthread_cond_wait(&nready.cond, &nready.mutex);
 
             nready.nready--;
-
             printf("Cracked password is:");
             printf("%s\n", numberofBreakPass[numberBreakPass-1]);
-
             password[numberOfMD5[numberBreakPass-1]][32] = '1';
             pthread_mutex_unlock(&nready.mutex);
         }
@@ -201,6 +211,13 @@ void *consumer(void *threadid)
 
     pthread_exit(NULL);
 }
+
+void handler1(int signum)
+{
+    printf("Wywolanie handlera\n");
+	pthread_exit(NULL);
+}
+
 /*
  * Handler dla sygnalu SIGHUP
  */
@@ -495,4 +512,3 @@ void GetDataFromFile(char *dictionaryFile, char *passwordFile)
     }
     fclose(handlerDictionaryFile);
 }
-
